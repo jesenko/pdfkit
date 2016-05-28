@@ -127,9 +127,12 @@ class PDFGradient
       gstate.end()
     
     return pattern
-      
-  apply: (op) ->
+
+  apply: (stroke) ->
     @embed() unless @embedded
+    @doc._setColorSpace('Pattern', stroke)
+
+    op = if stroke then 'SCN' else 'scn'
     @doc.addContent "/#{@id} #{op}"
     
     if @opacity_id

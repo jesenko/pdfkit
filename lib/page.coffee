@@ -41,6 +41,8 @@ class PDFPage
         get: => @resources.data.ExtGState ?= {}
       patterns:
         get: => @resources.data.Pattern ?= {}
+      color_spaces:
+        get: => @resources.data.ColorSpace ?= {}
       annotations:
         get: => @dictionary.data.Annots ?= []
     

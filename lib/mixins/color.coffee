@@ -1,4 +1,5 @@
 {PDFGradient, PDFLinearGradient, PDFRadialGradient} = require '../gradient'
+{PDFPattern} = require '../pattern'
 
 module.exports =
   initColor: ->
@@ -6,11 +7,34 @@ module.exports =
     @_opacityRegistry = {}
     @_opacityCount = 0
     @_gradCount = 0
-    
+    @_patternCount = 0
+    @_colorSpaceCount = 0
+    @_patternColorSpacesEmbeded = false
+    @_patternColorSpaceIds = {}
+
+  _isPatternColor: (color) ->
+    color instanceof PDFGradient or color instanceof PDFPattern
+
+  _embedPatternColorSpaces: ->
+    return if @_patternColorSpacesEmbeded
+    _patternColorSpacesEmbeded = true
+    for csName in ['DeviceCMYK', 'DeviceRGB']
+      cs = @ref ['Pattern', csName]
+      csId = @_getPatternColorSpaceId(csName)
+      @page.color_spaces[csId] = cs
+      cs.end()
+
+  _getPatternColorSpaceId: (csName) ->
+    "CsP#{csName}"
+
+  _getPatternColorSpace: (color) ->
+    if @_isPatternColor(color)
+      throw new Error "pattern color space is only valid for non-pattern colors"
+    @_getPatternColorSpaceId(@_getColorSpace(color))
+
   _normalizeColor: (color) ->
-    if color instanceof PDFGradient
-      return color
-    
+    return color if @_isPatternColor(color)
+
     if typeof color is 'string'
       if color.charAt(0) is '#'
         color = color.replace(/#([0-9A-F])([0-9A-F])([0-9A-F])/i, "#$1$1$2$2$3$3") if color.length is 4
@@ -34,6 +58,11 @@ module.exports =
     return null
 
   _setColor: (color, stroke) ->
+    if Array.isArray(color)   # uncollored patterns are given as [pattern, color]
+      unless color.length is 2
+        throw new Error "uncollored patterns must be given as arrays [pattern, color]"
+      patternColor = color[1]
+      color = color[0]
     color = @_normalizeColor color
     return no unless color
     
@@ -48,17 +77,15 @@ module.exports =
       @page.ext_gstates[name] = gstate
       @addContent "/#{name} gs"
       @_sMasked = false
-    
-    op = if stroke then 'SCN' else 'scn'
 
-    if color instanceof PDFGradient
-      @_setColorSpace 'Pattern', stroke
-      color.apply(op)
+    if @_isPatternColor(color)
+      color.apply(stroke, patternColor)
     else
-      space = if color.length is 4 then 'DeviceCMYK' else 'DeviceRGB'
+      space = @_getColorSpace(color)
       @_setColorSpace space, stroke
       
       color = color.join ' '
+      op = if stroke then 'SCN' else 'scn'
       @addContent "#{color} #{op}"
     
     return yes
@@ -67,18 +94,18 @@ module.exports =
     op = if stroke then 'CS' else 'cs'
     @addContent "/#{space} #{op}"
 
-  fillColor: (color, opacity = 1) ->
+  _getColorSpace: (color) ->
+    if color.length is 4 then 'DeviceCMYK' else 'DeviceRGB'
+
+  fillColor: (color) ->
     set = @_setColor color, no
-    @fillOpacity opacity if set
-    
-    # save this for text wrapper, which needs to reset 
+    # save this for text wrapper, which needs to reset
     # the fill color on new pages
-    @_fillColor = [color, opacity]
+    @_fillColor = [color]
     return this
 
-  strokeColor: (color, opacity = 1) ->
+  strokeColor: (color) ->
     set = @_setColor color, yes
-    @strokeOpacity opacity if set
     return this
      
   opacity: (opacity) ->
@@ -123,7 +150,10 @@ module.exports =
     
   radialGradient: (x1, y1, r1, x2, y2, r2) ->
     return new PDFRadialGradient(this, x1, y1, r1, x2, y2, r2)
-     
+
+  pattern: (bbox, xstep, ystep, pattern, colored = false) ->
+    return new PDFPattern(this, bbox, xstep, ystep, pattern, colored)
+
 namedColors =
   aliceblue: [240, 248, 255]
   antiquewhite: [250, 235, 215]
