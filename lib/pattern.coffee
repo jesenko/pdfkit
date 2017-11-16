@@ -19,6 +19,9 @@ class PDFPattern
       m[4] = m0 * dx + m2 * dy + m4
       m[5] = m1 * dx + m3 * dy + m5
 
+      resources = @doc.ref()
+      resources.end()
+
       @pattern = @doc.ref
         Type: 'Pattern',
         PatternType: 1,
@@ -27,7 +30,8 @@ class PDFPattern
         BBox: @bbox,
         XStep: @xstep,
         YStep: @ystep,
-        Matrix: (+v.toFixed(5) for v in m)
+        Matrix: (+v.toFixed(5) for v in m),
+        Resources: resources
       @pattern.end(@stream)
     @doc.page.patterns[@id] = @pattern
 
